@@ -4,7 +4,7 @@
   (:import [org.apache.lucene.document Document Field FieldType]
            [org.apache.lucene.util QueryBuilder]
            [org.apache.lucene.index IndexWriter IndexReader IndexOptions Term]
-           [org.apache.lucene.search BooleanClause BooleanClause$Occur BooleanQuery IndexSearcher Query ScoreDoc TopDocs]))
+           [org.apache.lucene.search BooleanClause BooleanClause$Occur BooleanQuery IndexSearcher Query ScoreDoc TopDocs PrefixQuery]))
 
 (defn- estimate-value
   [v]
@@ -59,6 +59,7 @@
    (add! index-store maps keys (standard-analyzer)))
   ([index-store maps keys analyzer]
    (with-open [writer (store/store-writer index-store analyzer)]
+     ;; (.setUseCompoundFile writer true)
      (doseq [m maps]
        (.addDocument writer
                      (map->document m (set keys)))))))
@@ -110,7 +111,9 @@
                                        (filter identity))]
                           (.add qb q BooleanClause$Occur/MUST))
                         (.build qb))
-    (string? query-form) (.createBooleanQuery builder (name current-key) query-form)))
+    ;; (string? query-form) (.createBooleanQuery builder (name current-key) query-form)
+    (string? query-form) (PrefixQuery. (Term. (name current-key) query-form))
+    ))
 
 (defn search
   "Search the supplied index with a query string."
@@ -126,6 +129,32 @@
           start (* page results-per-page)
           end (min (+ start results-per-page) (.totalHits hits) max-results)]
       (vec
-        (for [^ScoreDoc hit (map (partial aget (.scoreDocs hits))
-                                 (range start end))]
-          (document->map (.doc searcher (.doc hit))))))))
+       (for [^ScoreDoc hit (map (partial aget (.scoreDocs hits))
+                                (range start end))]
+         (document->map (.doc searcher (.doc hit))))))))
+
+(defn- query-form->prefix-query
+  [query-form]
+  (cond
+    (map? query-form) (let [current-key (key (first query-form))
+                            current-val (val (first query-form))
+                            term (Term. (name current-key) current-val)
+                            query (PrefixQuery. term)]
+                        query)))
+
+(defn search-prefix
+  "Search the supplied index with a query string."
+  [index-store query-form max-results & [analyzer page results-per-page]]
+  (with-open [reader (store/store-reader index-store)]
+    (let [analyzer (or analyzer (standard-analyzer))
+          page (or page 0)
+          results-per-page (or results-per-page max-results)
+          ^IndexSearcher searcher (IndexSearcher. reader)
+          ^PrefixQuery query (query-form->prefix-query query-form)
+          ^TopDocs hits (.search searcher query (int max-results))
+          start (* page results-per-page)
+          end (min (+ start results-per-page) (.totalHits hits) max-results)]
+      (vec
+       (for [^ScoreDoc hit (map (partial aget (.scoreDocs hits))
+                                (range start end))]
+         (document->map (.doc searcher (.doc hit))))))))
