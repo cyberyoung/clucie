@@ -1,6 +1,6 @@
-(defproject clucie "0.2.0-SNAPSHOT"
+(defproject org.clojars.cyberyoung/clucie "0.2.0-SNAPSHOT"
   :description "Clojure for the Lucene"
-  :url "https://github.com/federkasten/clucie"
+  :url "https://github.com/cyberyoung/clucie"
   :license {:name "Apache License, Version 2.0"
             :url "http://www.apache.org/licenses/LICENSE-2.0.html"}
   :min-lein-version "2.5.0"
